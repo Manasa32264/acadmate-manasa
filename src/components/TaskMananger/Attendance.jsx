@@ -47,6 +47,12 @@ const AttendanceTracker = ({ onBack }) => {
 
   const handleAddSubject = () => {
     if (newSubjectName.trim()) {
+      const normalized = newSubjectName.trim().toLowerCase();
+      const exists = subjects.some(s => (s.name || '').trim().toLowerCase() === normalized);
+      if (exists) {
+        alert('This subject has already been added.');
+        return;
+      }
       saveToUndoStack();
       const newSubject = {
         id: Date.now().toString(),
