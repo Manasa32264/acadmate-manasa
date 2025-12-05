@@ -7,7 +7,7 @@ import { ExamPrepCard } from "./ExamPrep";
 const ChatbotHub = () => {
   const [activeMode, setActiveMode] = useState("eduboat");
   const [messages, setMessages] = useState({
-    quickhelp: [{ type: "bot", text: "Welcome to QuickHelp! Get instant explanations ⚡" }],
+    quickhelp: [{ type: "bot", text: "Welcome to QuickHelp!! Get instant explanations ⚡" }],
     examprep: [{ type: "bot", text: "Welcome to ExamPrep! Get exam-ready answers ✍️" }],
     deepdive: [{ type: "bot", text: "Welcome to DeepDive! Explore concepts thoroughly 🌊" }]
   });
@@ -25,12 +25,54 @@ const ChatbotHub = () => {
       ? `${input} (${selectedMarks} marks)`
       : input;
 
+    // append the user's message to the conversation immediately
     setMessages(prev => ({
       ...prev,
-      [activeMode]: [...prev[activeMode], { type: "user", text: userMessage }]
+      [activeMode]: [...(prev[activeMode] || []), { type: 'user', text: userMessage }]
     }));
+
+    // clear the input so it doesn't keep the typed text after sending
     setInput("");
+    // close marks dropdown when a message is sent
+    setShowMarksDropdown(false);
+
     setIsTyping(true);
+
+const endpoint = "http://127.0.0.1:8000/ask"; // your FastAPI server URL
+
+const payload = {
+  question: input,
+  marks: activeMode === "examprep" ? selectedMarks : 5,
+};
+
+fetch(endpoint, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+})
+  .then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Error from server");
+    }
+    return res.json();
+  })
+  .then((data) => {
+    setMessages((prev) => ({
+      ...prev,
+      [activeMode]: [...prev[activeMode], { type: "bot", text: data.answer }],
+    }));
+  })
+  .catch((error) => {
+    setMessages((prev) => ({
+      ...prev,
+      [activeMode]: [
+        ...prev[activeMode],
+        { type: "bot", text:  `Error: ${error.message}` },
+      ],
+    }));
+  })
+  .finally(() => setIsTyping(false));
 
     // Integrate your unified ChatbotHub AI API here based on `activeMode`:
     // Example structure (replace setTimeout with real calls):
