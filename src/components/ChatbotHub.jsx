@@ -17,6 +17,9 @@ const ChatbotHub = () => {
   const [showMarksDropdown, setShowMarksDropdown] = useState(false);
   const chatboxRef = useRef(null);
 
+  // Track previous messages length to scroll only on new messages
+  const prevMessagesLengthRef = useRef(0);
+
   const sendMessage = () => {
     if (!input.trim()) return;
 
@@ -67,19 +70,6 @@ const ChatbotHub = () => {
         }));
       })
       .finally(() => setIsTyping(false));
-
-    setTimeout(() => {
-      let response = "";
-      if (activeMode === "quickhelp") response = "Quick explanation: " + input;
-      else if (activeMode === "examprep") response = "Here's the exam-ready answer for: " + input;
-      else if (activeMode === "deepdive") response = "Here's a deep-dive explanation for: " + input;
-
-      setMessages(prev => ({
-        ...prev,
-        [activeMode]: [...prev[activeMode], { type: "bot", text: response }]
-      }));
-      setIsTyping(false);
-    }, 800);
   };
 
   // Navigate between modes
@@ -95,12 +85,23 @@ const ChatbotHub = () => {
     if (e.key === "Enter") sendMessage();
   };
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom only when new message added
   useEffect(() => {
-    if (chatboxRef.current) {
+    const currentMessagesLength = (messages[activeMode] || []).length;
+
+    if (chatboxRef.current && currentMessagesLength > prevMessagesLengthRef.current) {
       chatboxRef.current.scrollTop = chatboxRef.current.scrollHeight;
     }
-  }, [messages, isTyping, activeMode]);
+
+    prevMessagesLengthRef.current = currentMessagesLength;
+  }, [messages, activeMode]);
+
+  // Scroll to top when switching modes
+  useEffect(() => {
+    if (chatboxRef.current) {
+      chatboxRef.current.scrollTop = 0;
+    }
+  }, [activeMode]);
 
   // Close marks dropdown when clicking outside
   useEffect(() => {
@@ -177,26 +178,19 @@ const ChatbotHub = () => {
   const modeConfig = getModeConfig();
   const currentMessages = messages[activeMode] || [];
 
-  // Escape HTML
   const escapeHtml = (str) =>
     str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  // Render simple Markdown safely
   const renderMarkdown = (text) => {
     if (!text) return '';
     let escaped = escapeHtml(text);
-    // inline code
     escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // bold
     escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    // italic
     escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    // line breaks
     escaped = escaped.replace(/\n/g, '<br>');
     return escaped;
   };
 
-  // EduBoat cards
   if (activeMode === "eduboat") {
     return (
       <div className="eduboat-container">
@@ -220,7 +214,6 @@ const ChatbotHub = () => {
     );
   }
 
-  // Chat interface
   return (
     <div className="chatbot-hub">
       <header className="chatbot-header">
