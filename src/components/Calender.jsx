@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import axios from 'axios'
 import './Calendar.css'
 
 const Calendar = ({ onBack }) => {
@@ -7,33 +8,107 @@ const Calendar = ({ onBack }) => {
     { id: 2, title: 'Mid-term Exams', date: '2025-02-20', type: 'exam', isCollege: true },
     { id: 3, title: 'Sports Day', date: '2025-02-28', type: 'event', isCollege: true }
   ])
-  
+
+  const [user, setUser] = useState(null)
   const [newEvent, setNewEvent] = useState({ title: '', date: '', type: 'event' })
   const [notification, setNotification] = useState('')
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
   useEffect(() => {
-    const today = new Date()
-    const feeEvents = events.filter(event => 
-      event.type === 'fee' && 
-      new Date(event.date) > today &&
-      new Date(event.date) <= new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-    )
-    
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      if (!parsed.id) return alert("User ID missing. Please log in again.");
+      setUser(parsed);
+    }
+  }, []);
+
+  // Fetch events for user
+  useEffect(() => {
+    if (!user) return;
+    const fetchEvents = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/reminder/user/${user.id}`);
+        const data = Array.isArray(res.data.events) ? res.data.events : [];
+
+        // 🧹 Auto-delete past events (before today)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const futureEvents = [];
+        for (const event of data) {
+          const eventDate = new Date(event.date + "T00:00:00");
+          if (eventDate < today) {
+            // Delete expired event from backend
+            try {
+              await axios.delete(`http://localhost:5000/api/reminder/${event.id}`);
+              console.log(`Deleted past event: ${event.title}`);
+            } catch (err) {
+              console.error(`Failed to delete past event ${event.id}:`, err);
+            }
+          } else {
+            futureEvents.push(event);
+          }
+        }
+
+        setEvents(futureEvents);
+      } catch (err) {
+        console.error("Error fetching events:", err);
+        setEvents([]);
+      }
+    };
+    fetchEvents();
+  }, [user]);
+
+  // Fee notifications within 7 days
+  useEffect(() => {
+    if (!events.length) return;
+    const today = new Date();
+    const feeEvents = events.filter(
+      (e) =>
+        e?.type === "fee" &&
+        e.date &&
+        new Date(e.date + "T00:00:00") > today &&
+        new Date(e.date + "T00:00:00") <= new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+    );
+
     if (feeEvents.length > 0) {
       setNotification(`⚠️ Fee due in ${Math.ceil((new Date(feeEvents[0].date) - today) / (1000 * 60 * 60 * 24))} days!`)
       setTimeout(() => setNotification(''), 5000)
     }
   }, [events])
 
-  const addEvent = () => {
-    if (newEvent.title && newEvent.date) {
-      setEvents([...events, { id: Date.now(), ...newEvent, isCollege: false }])
-      setNewEvent({ title: '', date: '', type: 'event' })
-    }
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') addEvent()
   }
 
-  const handleKeyPress = (e) => { if (e.key === 'Enter') addEvent() }
+  const addEvent = () => {
+    if (!newEvent.title || !newEvent.date) return;
+
+    // Disallow past dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventDate = new Date(`${newEvent.date}T00:00:00`);
+    if (eventDate < today) {
+      alert('Please select today or a future date.');
+      return;
+    }
+
+    setEvents([...events, { id: Date.now(), ...newEvent, isCollege: false }]);
+    setNewEvent({ title: '', date: '', type: 'event' });
+  }
+
+  // Delete event manually
+  const deleteEvent = async (eventId) => {
+    if (!window.confirm("Delete this event?")) return;
+    try {
+      await axios.delete(`http://localhost:5000/api/reminder/${eventId}`);
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    } catch (err) {
+      console.error("Failed to delete:", err);
+      alert("Failed to delete event");
+    }
+  };
 
   const getDaysInMonth = (date) => {
     const year = date.getFullYear()
